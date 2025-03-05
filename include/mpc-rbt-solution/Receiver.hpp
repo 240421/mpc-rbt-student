@@ -15,7 +15,7 @@ public:
     create();
     configure();
     bind();
-    callback = std::bind(&onDataReceived, this, )
+    callback = std::bind(&Receiver::Node::onDataReceived, this, std::placeholders::_1);
   }
 
   void run();
