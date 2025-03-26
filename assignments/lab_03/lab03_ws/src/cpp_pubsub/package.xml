@@ -4,7 +4,7 @@
   <name>cpp_pubsub</name>
   <version>0.0.0</version>
   <description>Examples of minimal publisher/subscriber using rclcpp</description>
-  <maintainer email="240421@vutbr.cz">student</maintainer>
+  <maintainer email="240421@vutbr.cz">Peter</maintainer>
   <license>Apache License 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
