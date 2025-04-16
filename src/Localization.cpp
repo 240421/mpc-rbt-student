@@ -7,26 +7,7 @@
 #include "tf2/LinearMath/Quaternion.h"
 #include "mpc_rbt_simulator/RobotConfig.hpp"
 
-
-
-class LocalizationNode : public rclcpp::Node {
-public:
-    LocalizationNode();
-
-    void publishOdometry();  // ✅ Moved to public so main() can access it
-
-private:
-    void jointCallback(const sensor_msgs::msg::JointState & msg);
-    void updateOdometry(double left_wheel_vel, double right_wheel_vel, double dt);
-    void publishTransform();
-
-    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_subscriber_;
-    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_publisher_;
-    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-
-    nav_msgs::msg::Odometry odometry_;
-    rclcpp::Time last_time_;
-};
+#include "Localization.hpp" 
 
 LocalizationNode::LocalizationNode() : rclcpp::Node("localization_node"), last_time_(this->get_clock()->now()) {
     odometry_.header.frame_id = "map";

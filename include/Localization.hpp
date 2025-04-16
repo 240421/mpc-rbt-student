@@ -10,27 +10,23 @@
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
 class LocalizationNode : public rclcpp::Node {
-public:
-    LocalizationNode();
-
-private:
-    void jointCallback(const sensor_msgs::msg::JointState & msg);
-
-    void updateOdometry(double left_wheel_vel, double right_wheel_vel, double dt);
-    void publishOdometry();
-    void publishTransform();
-
-    // Subscribers
-    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_subscriber_;
-
-    // Publishers
-    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_publisher_;
-
-    // Transformations
-    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-
-    nav_msgs::msg::Odometry odometry_;
-    rclcpp::Time last_time_;
-};
+    public:
+        LocalizationNode();
+    
+        void publishOdometry();  // ✅ Moved to public so main() can access it
+    
+    private:
+        void jointCallback(const sensor_msgs::msg::JointState & msg);
+        void updateOdometry(double left_wheel_vel, double right_wheel_vel, double dt);
+        void publishTransform();
+    
+        rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_subscriber_;
+        rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_publisher_;
+        std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+    
+        nav_msgs::msg::Odometry odometry_;
+        rclcpp::Time last_time_;
+    };
+    
 
 #endif // LOCALIZATION_HPP
