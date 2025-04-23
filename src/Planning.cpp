@@ -72,138 +72,163 @@ void PlanningNode::planPath(const std::shared_ptr<nav_msgs::srv::GetPlan::Reques
     RCLCPP_INFO(get_logger(), "Path planning completed and sent back.");
 }
 
-
 void PlanningNode::dilateMap() {
-    // add code here
-
-    // ********
-    // * Help *
-    // ********
-    /*
     nav_msgs::msg::OccupancyGrid dilatedMap = map_;
-    ... processing ...
+
+    int radius = 6;  // Rozšírenie prekážok o 5 pixelov
+    for (int y = 0; y < map_.info.height; y++) {
+        for (int x = 0; x < map_.info.width; x++) {
+            if (map_.data[y * map_.info.width + x] > 50) {  // Ak je bunka prekážka
+                for (int dy = -radius; dy <= radius; dy++) {
+                    for (int dx = -radius; dx <= radius; dx++) {
+                        int nx = x + dx;
+                        int ny = y + dy;
+                        if (nx >= 0 && ny >= 0 && nx < map_.info.width && ny < map_.info.height) {
+                            dilatedMap.data[ny * map_.info.width + nx] = 100; // Označiť ako prekážku
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     map_ = dilatedMap;
-    */
+    RCLCPP_INFO(get_logger(), "Map dilated.");
 }
 
+
 void PlanningNode::aStar(const geometry_msgs::msg::PoseStamped &start, const geometry_msgs::msg::PoseStamped &goal) {
-    RCLCPP_INFO(get_logger(), "Starting A-Star path planning...");
-
-    // Convert start and goal positions to map indices
-    int start_x = (start.pose.position.x - map_.info.origin.position.x) / map_.info.resolution;
-    int start_y = (start.pose.position.y - map_.info.origin.position.y) / map_.info.resolution;
-    int goal_x = (goal.pose.position.x - map_.info.origin.position.x) / map_.info.resolution;
-    int goal_y = (goal.pose.position.y - map_.info.origin.position.y) / map_.info.resolution;
-
-    Cell cStart(start_x, start_y);
-    Cell cGoal(goal_x, goal_y);
+    // add code here
+    auto resolution = map_.info.resolution;
+    auto origin = map_.info.origin;
+    
+    int width = map_.info.width;
+    int height = map_.info.height;
+    
+    int sx = static_cast<int>((start.pose.position.x - origin.position.x) / resolution);
+    int sy = static_cast<int>((start.pose.position.y - origin.position.y) / resolution);
+    int gx = static_cast<int>((goal.pose.position.x - origin.position.x) / resolution);
+    int gy = static_cast<int>((goal.pose.position.y - origin.position.y) / resolution);
+    
+    Cell cStart(sx, sy);
+    Cell cGoal(gx, gy);
 
     std::vector<std::shared_ptr<Cell>> openList;
     std::vector<bool> closedList(map_.info.height * map_.info.width, false);
 
     openList.push_back(std::make_shared<Cell>(cStart));
+    
+    auto getIndex = [width](int x, int y) {
+    	return y*width+x;
+    };
+    
+    auto isObstacle = [this](int x, int y) {
+    	return map_.data[y * map_.info.width + x] > 50;
+    };
+    
+    std::vector<std::pair<int, int>> directions = {
+    	{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+    	{1, 1}, {-1,-1}, {1,-1}, {-1, 1}
+    };
 
-    // Define movement directions: up, down, left, right, diagonals
-    std::vector<std::pair<int, int>> directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1},
-                                                   {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
-
-    while (!openList.empty() && rclcpp::ok()) {
-        // Find the cell with the lowest f-value in openList
-        auto current = *std::min_element(openList.begin(), openList.end(),
-                                         [](const std::shared_ptr<Cell>& a, const std::shared_ptr<Cell>& b) {
-                                             return a->f < b->f;
-                                         });
-
-        // Remove current from openList and mark it as visited
-        openList.erase(std::remove_if(openList.begin(), openList.end(),
-                                      [&current](const std::shared_ptr<Cell>& c) { return c->x == current->x && c->y == current->y; }),
-                       openList.end());
-
-        closedList[current->y * map_.info.width + current->x] = true;
-
-        // If the goal is reached, reconstruct the path
-        if (current->x == cGoal.x && current->y == cGoal.y) {
-            RCLCPP_INFO(get_logger(), "Path found! Reconstructing...");
-            
-            nav_msgs::msg::Path planned_path;
-            planned_path.header.stamp = this->get_clock()->now();
-            planned_path.header.frame_id = "map";  // Ensure correct frame ID
-
-            while (current) {
-                geometry_msgs::msg::PoseStamped pose;
-                pose.pose.position.x = current->x * map_.info.resolution + map_.info.origin.position.x;
-                pose.pose.position.y = current->y * map_.info.resolution + map_.info.origin.position.y;
-                planned_path.poses.push_back(pose);
-                current = current->parent;
-            }
-
-            std::reverse(planned_path.poses.begin(), planned_path.poses.end());
-
-            // Explicitly publish to "planned_path" topic
-            path_pub_->publish(planned_path);
-            
-            RCLCPP_INFO(get_logger(), "Path published to 'planned_path'. Planning complete.");
-            return;
+    while(!openList.empty() && rclcpp::ok()) {
+        auto current_it = std::min_element(openList.begin(), openList.end(), [](const std::shared_ptr<Cell> &a, const std::shared_ptr<Cell> &b){
+        	return a->f < b->f;
+        	});
+        std::shared_ptr<Cell> current = *current_it;
+        openList.erase(current_it);
+        
+        if(current->x == cGoal.x && current->y == cGoal.y) {
+        	path_.poses.clear();
+        	while(current) {
+        		geometry_msgs::msg::PoseStamped pose;
+        		pose.pose.position.x = current->x*resolution+origin.position.x+resolution/2;
+        		pose.pose.position.y = current->y*resolution+origin.position.y+resolution/2;
+        		pose.pose.position.z = 0.0;
+        		pose.pose.orientation.w = 1.0;
+        		path_.poses.push_back(pose);
+        		current = current->parent;
+        	}
+        	
+        	std::reverse(path_.poses.begin(), path_.poses.end());
+        	path_.header.frame_id = map_.header.frame_id;
+        	return;
         }
+        
+        closedList[getIndex(current->x, current->y)] = true;
+        
+        for(const auto &[dx, dy] : directions) {
+        	int nx = current->x + dx;
+        	int ny = current->y + dy;
+        	
+        	if(nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+            if(closedList[getIndex(nx, ny)]) continue;
+        	if(isObstacle(nx, ny)) continue;
+            
 
-        // Expand neighbors
-        for (const auto& dir : directions) {
-            int nx = current->x + dir.first;
-            int ny = current->y + dir.second;
-
-            // Ensure within bounds
-            if (nx < 0 || ny < 0 || nx >= map_.info.width || ny >= map_.info.height) {
-                continue;
-            }
-
-            // Check occupancy grid (0 = free space, otherwise obstacle)
-            if (map_.data[ny * map_.info.width + nx] != 0) {
-                continue;
-            }
-
-            // Skip if already visited
-            if (closedList[ny * map_.info.width + nx]) {
-                continue;
-            }
-
-            auto neighbor = std::make_shared<Cell>(nx, ny);
-            neighbor->g = current->g + std::hypot(dir.first, dir.second);
-            neighbor->h = std::hypot(nx - cGoal.x, ny - cGoal.y);
-            neighbor->f = neighbor->g + neighbor->h;
-            neighbor->parent = current;
-
-            // Ensure no duplicate entries in openList
-            bool skip = false;
-            for (const auto& cell : openList) {
-                if (cell->x == neighbor->x && cell->y == neighbor->y && cell->g <= neighbor->g) {
-                    skip = true;
-                    break;
-                }
-            }
-
-            if (!skip) {
-                openList.push_back(neighbor);
-            }
+        		
+        	float g_new = current->g + std::hypot(dx, dy);
+        	float h_new = std::hypot(gx - nx, gy - ny);
+        	float f_new = g_new + h_new;
+        	
+        	auto it = std::find_if(openList.begin(), openList.end(), [nx, ny](const std::shared_ptr<Cell> &cell) {
+        		return cell->x == nx && cell->y == ny;
+        	});
+        	
+        	if (it == openList.end() || f_new < (*it)->f) {
+        		auto neighbor = std::make_shared<Cell>(nx, ny);
+        		neighbor->g = g_new;
+        		neighbor->h = h_new;
+        		neighbor->f = f_new;
+        		neighbor->parent = current;
+        		
+        		if(it == openList.end()) {
+        			openList.push_back(neighbor);
+        		} else {
+        			*it = neighbor;
+        		}
+        	}	
         }
+        
+         
     }
 
     RCLCPP_ERROR(get_logger(), "Unable to plan path.");
 }
 
-
 void PlanningNode::smoothPath() {
     // add code here
-
-    // ********
-    // * Help *
-    // ********
-    /*
+    if (path_.poses.size() < 3) {
+        return; // No need to smooth if the path is too short
+    }
+    
     std::vector<geometry_msgs::msg::PoseStamped> newPath = path_.poses;
-    ... processing ...
+    
+    int window = 3;
+    for (size_t i = 0; i < path_.poses.size(); ++i) {
+        double sum_x = 0.0;
+        double sum_y = 0.0;
+        int count = 0;
+
+        for (int j = -window; j <= window; ++j) {
+            int idx = i + j;
+            if (idx >= 0 && idx < path_.poses.size()) {
+                sum_x += path_.poses[idx].pose.position.x;
+                sum_y += path_.poses[idx].pose.position.y;
+                count++;
+            }
+        }
+
+        newPath[i].pose.position.x = sum_x / count;
+        newPath[i].pose.position.y = sum_y / count;
+    }
+
     path_.poses = newPath;
-    */
 }
 
 Cell::Cell(int c, int r) {
-    // add code here
+    x = c;
+    y = r;
+    g = h = f = 0.0f;
+    parent = nullptr;
 }
