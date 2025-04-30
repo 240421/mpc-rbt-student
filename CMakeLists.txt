@@ -44,6 +44,7 @@ add_library(${PROJECT_NAME} SHARED
   src/KeyboardControl.cpp
   src/Localization.cpp
   src/Planning.cpp
+  src/MotionControl.cpp
 )
 
 ament_target_dependencies(${PROJECT_NAME} ${dependencies})
@@ -68,6 +69,10 @@ install(TARGETS localization DESTINATION lib/${PROJECT_NAME})
 add_executable(planning src/planning_node.cpp)
 target_link_libraries(planning ${PROJECT_NAME})
 install(TARGETS planning DESTINATION lib/${PROJECT_NAME})
+
+add_executable(motion_control src/motion_control_node.cpp)
+target_link_libraries(motion_control ${PROJECT_NAME})
+install(TARGETS motion_control DESTINATION lib/${PROJECT_NAME})
 
 # ROS exports
 ament_export_include_directories(include)
